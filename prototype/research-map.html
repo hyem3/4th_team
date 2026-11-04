@@ -1,1 +1,529 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReseaMate - Research Map</title>
+<style>
+  :root {
+    --navy: #0b2a55;
+    --blue: #2f6fd6;
+    --line: #c9d3e3;
+    --bg: #f6f8fc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    font-family: "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    background: var(--bg); color: #1b2433;
+  }
 
+  /* ---------- 상단 바 ---------- */
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--line);
+  }
+  .logo { font-weight: 800; font-size: 20px; color: var(--navy); margin-right: 8px; }
+  #searchForm { display: flex; gap: 6px; flex: 1; max-width: 420px; }
+  #searchInput {
+    flex: 1; padding: 8px 12px; border: 1px solid var(--line);
+    border-radius: 999px; font-size: 14px;
+  }
+  button {
+    border: 0; border-radius: 8px; padding: 8px 12px; font-size: 13px;
+    background: var(--navy); color: #fff; cursor: pointer;
+  }
+  button.ghost { background: #fff; color: var(--navy); border: 1px solid var(--navy); }
+  button:disabled { opacity: .4; cursor: default; }
+
+  /* ---------- 본문 ---------- */
+  main { flex: 1; display: flex; min-height: 0; }
+  #mapWrap { flex: 1; position: relative; min-width: 0; }
+  #map { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+  #map.dragging { cursor: grabbing; }
+  .zoom { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 6px; }
+  .zoom button { width: 36px; padding: 8px 0; }
+  .zoom button.wide { width: auto; padding: 8px 12px; }
+  .hint { position: absolute; right: 12px; bottom: 12px; font-size: 12px; color: #6b7a90; }
+
+  /* ---------- 지도 안의 그림 ---------- */
+  .edge { fill: none; stroke: #9db4d8; stroke-width: 2; }
+  .node { cursor: pointer; }
+  .node rect { fill: #fff; stroke: var(--line); stroke-width: 1.5; }
+  .node.root rect { fill: var(--navy); stroke: var(--navy); }
+  .node.selected rect { stroke: var(--blue); stroke-width: 3; }
+  .node text { font-size: 15px; fill: #1b2433; pointer-events: none; }
+  .node.root text { fill: #fff; }
+  .node .badge { fill: var(--blue); }
+  .node .badge-text { fill: #fff; font-size: 16px; font-weight: 700; }
+
+  /* ---------- 오른쪽 패널 ---------- */
+  aside {
+    width: 320px; background: #fff; border-left: 1px solid var(--line);
+    padding: 16px; overflow-y: auto;
+  }
+  aside h3 { margin: 18px 0 8px; font-size: 14px; color: var(--navy); }
+  aside h3:first-child { margin-top: 0; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .paper {
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; margin-top: 8px; font-size: 13px;
+  }
+  .paper b { display: block; margin-bottom: 4px; }
+  .paper span { color: #6b7a90; }
+  .empty { font-size: 13px; color: #6b7a90; line-height: 1.5; }
+  ol.history, ul.saved { margin: 0; padding: 0; list-style: none; }
+  ol.history li {
+    display: inline-block; margin: 0 4px 6px 0; padding: 4px 10px;
+    border-radius: 999px; background: #eef3fb; font-size: 12px; cursor: pointer;
+  }
+  ol.history li.now { background: var(--navy); color: #fff; }
+  ul.saved li {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; margin-bottom: 6px; border-radius: 8px;
+    background: var(--navy); color: #fff; font-size: 13px; cursor: pointer;
+  }
+  ul.saved li .x { opacity: .7; padding-left: 10px; }
+
+  @media (max-width: 760px) {
+    main { flex-direction: column; }
+    aside { width: 100%; max-height: 40%; border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">ReseaMate</span>
+  <form id="searchForm">
+    <input id="searchInput" placeholder="Search for new keywords... (예: AI, 머신러닝)">
+    <button type="submit">검색</button>
+  </form>
+  <button id="backBtn" class="ghost">← 이전 지점으로</button>
+</header>
+
+<main>
+  <section id="mapWrap">
+    <svg id="map">
+      <g id="viewport">
+        <g id="edges"></g>
+        <g id="nodes"></g>
+      </g>
+    </svg>
+    <div class="zoom">
+      <button id="zoomIn" title="확대">+</button>
+      <button id="zoomOut" title="축소">−</button>
+      <button id="fitBtn" class="wide">전체 보기</button>
+    </div>
+    <div class="hint">키워드 클릭 = 펼치기/접기 · 드래그 = 이동 · 스크롤 = 확대/축소</div>
+  </section>
+
+  <aside>
+    <h3>선택한 키워드</h3>
+    <div id="detail"></div>
+
+    <h3>탐색 경로 (클릭하면 그 지점으로 돌아가요)</h3>
+    <ol id="history" class="history"></ol>
+
+    <h3>저장된 주제</h3>
+    <ul id="saved" class="saved"></ul>
+  </aside>
+</main>
+
+<script>
+/* =========================================================
+   1. 데이터 (지금은 샘플. 2주차에 OpenAlex API로 바꿀 부분)
+   - children: 이 키워드를 클릭하면 펼쳐질 하위 키워드
+   - papers  : 이 키워드에 붙는 논문 카드
+   ========================================================= */
+const DATA = {
+  "AI": {
+    children: ["머신러닝", "자연어 처리"],
+    papers: []
+  },
+  "머신러닝": {
+    children: ["딥러닝", "강화학습"],
+    papers: [
+      { title: "Multimodal Machine Learning: A Survey and Taxonomy",
+        authors: "Baltrušaitis et al.", venue: "TPAMI 2019" }
+    ]
+  },
+  "딥러닝": {
+    children: [],
+    papers: [
+      { title: "Deep learning", authors: "LeCun, Bengio, Hinton", venue: "Nature 2015" }
+    ]
+  },
+  "강화학습": {
+    children: [],
+    papers: [
+      { title: "Human-level control through deep reinforcement learning",
+        authors: "Mnih et al.", venue: "Nature 2015" }
+    ]
+  },
+  "자연어 처리": {
+    children: ["텍스트 분석", "감성분석"],
+    papers: [
+      { title: "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+        authors: "Devlin et al.", venue: "NAACL 2019" }
+    ]
+  },
+  "텍스트 분석": {
+    children: [],
+    papers: [
+      { title: "Attention Is All You Need", authors: "Vaswani et al.", venue: "NeurIPS 2017" }
+    ]
+  },
+  "감성분석": {
+    children: [],
+    papers: [
+      { title: "Thumbs up? Sentiment Classification using Machine Learning Techniques",
+        authors: "Pang, Lee, Vaithyanathan", venue: "EMNLP 2002" }
+    ]
+  }
+};
+
+function childrenOf(label) { return (DATA[label] && DATA[label].children) || []; }
+function papersOf(label)   { return (DATA[label] && DATA[label].papers)   || []; }
+
+/* =========================================================
+   2. 상태 (화면이 기억해야 하는 것들)
+   ========================================================= */
+const STORE_KEY = "reseamate-research-map-v1";
+
+function defaultState() {
+  return {
+    root: "AI",              // 지도의 출발점
+    expanded: ["AI"],        // 펼쳐진 키워드 목록
+    selected: "AI",          // 지금 선택한 키워드
+    history: ["AI"],         // 탐색 경로 (방문 순서)
+    saved: []                // 저장된 주제
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    return raw ? JSON.parse(raw) : defaultState();
+  } catch (e) { return defaultState(); }
+}
+function saveState() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+let state = loadState();
+let view = { x: 0, y: 0, k: 1 };   // 지도의 이동(x,y)과 확대(k)
+let current = [];                  // 지금 화면에 그려진 노드들
+
+/* =========================================================
+   3. 위치 계산 (왼쪽 → 오른쪽으로 펼쳐지는 나무 모양)
+   ========================================================= */
+const GAP_X = 240, GAP_Y = 64, NODE_H = 40;
+
+function layout() {
+  const nodes = [], edges = [];
+  const seen = new Set();
+  let leafCount = 0;
+
+  function walk(label, depth) {
+    seen.add(label);
+    const node = {
+      label, depth,
+      x: depth * GAP_X,
+      w: Math.max(70, label.length * 15 + 36),
+      y: 0
+    };
+    nodes.push(node);
+
+    const kids = state.expanded.includes(label)
+      ? childrenOf(label).filter(c => !seen.has(c))
+      : [];
+
+    if (kids.length === 0) {
+      node.y = leafCount * GAP_Y;
+      leafCount++;
+    } else {
+      const kidNodes = kids.map(k => walk(k, depth + 1));
+      kidNodes.forEach(kn => edges.push({ from: node, to: kn }));
+      const ys = kidNodes.map(kn => kn.y);
+      node.y = (Math.min(...ys) + Math.max(...ys)) / 2;   // 부모는 자식들의 가운데
+    }
+    return node;
+  }
+
+  walk(state.root, 0);
+  return { nodes, edges };
+}
+
+/* =========================================================
+   4. 그리기
+   ========================================================= */
+const svg = document.getElementById("map");
+const viewport = document.getElementById("viewport");
+const edgesG = document.getElementById("edges");
+const nodesG = document.getElementById("nodes");
+
+function svgEl(tag, attrs) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function el(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  Object.assign(e, props || {});
+  kids.forEach(k => e.append(k));
+  return e;
+}
+
+function renderMap() {
+  const { nodes, edges } = layout();
+  current = nodes;
+  edgesG.innerHTML = "";
+  nodesG.innerHTML = "";
+
+  edges.forEach(e => {
+    const x1 = e.from.x + e.from.w + 10, y1 = e.from.y;
+    const x2 = e.to.x, y2 = e.to.y;
+    const mx = (x1 + x2) / 2;
+    edgesG.appendChild(svgEl("path", {
+      class: "edge",
+      d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`
+    }));
+  });
+
+  nodes.forEach(n => {
+    const cls = "node" + (n.depth === 0 ? " root" : "") + (n.label === state.selected ? " selected" : "");
+    const g = svgEl("g", { class: cls, transform: `translate(${n.x},${n.y - NODE_H / 2})` });
+
+    g.appendChild(svgEl("rect", { width: n.w, height: NODE_H, rx: 20 }));
+    const t = svgEl("text", {
+      x: n.w / 2, y: NODE_H / 2, "text-anchor": "middle", "dominant-baseline": "central"
+    });
+    t.textContent = n.label;
+    g.appendChild(t);
+
+    // 하위 키워드가 있으면 + / − 버튼 모양 표시
+    if (childrenOf(n.label).length > 0) {
+      const open = state.expanded.includes(n.label);
+      g.appendChild(svgEl("circle", { class: "badge", cx: n.w + 2, cy: NODE_H / 2, r: 10 }));
+      const bt = svgEl("text", {
+        class: "badge-text", x: n.w + 2, y: NODE_H / 2,
+        "text-anchor": "middle", "dominant-baseline": "central"
+      });
+      bt.textContent = open ? "−" : "+";
+      g.appendChild(bt);
+    }
+
+    g.addEventListener("click", () => { if (!moved) onNodeClick(n.label); });
+    nodesG.appendChild(g);
+  });
+
+  applyView();
+}
+
+function renderPanel() {
+  // --- 선택한 키워드 + 논문 카드 ---
+  const detail = document.getElementById("detail");
+  detail.innerHTML = "";
+  const sel = state.selected;
+  const title = el("div", { textContent: sel });
+  title.style.cssText = "font-size:20px;font-weight:800;color:#0b2a55";
+  detail.append(title);
+
+  const isSaved = state.saved.includes(sel);
+  detail.append(el("div", { className: "actions" },
+    el("button", {
+      textContent: isSaved ? "✓ 저장됨" : "🔖 이 주제 저장",
+      disabled: isSaved,
+      onclick: () => { state.saved.push(sel); update(); }
+    }),
+    el("button", {
+      className: "ghost", textContent: "여기서 새로 시작",
+      onclick: () => startFrom(sel)
+    })
+  ));
+
+  const papers = papersOf(sel);
+  if (papers.length === 0) {
+    detail.append(el("p", {
+      className: "empty",
+      textContent: DATA[sel]
+        ? "이 키워드에 연결된 논문 샘플이 없어요."
+        : "샘플 데이터에 없는 키워드예요. 2주차에 OpenAlex API를 연결하면 실제 논문과 하위 키워드가 나옵니다."
+    }));
+  }
+  papers.forEach(p => {
+    detail.append(el("div", { className: "paper" },
+      el("b", { textContent: p.title }),
+      el("span", { textContent: p.authors + " · " + p.venue })
+    ));
+  });
+
+  // --- 탐색 경로 ---
+  const hist = document.getElementById("history");
+  hist.innerHTML = "";
+  state.history.forEach((label, i) => {
+    const isNow = i === state.history.length - 1;
+    hist.append(el("li", {
+      className: isNow ? "now" : "",
+      textContent: (i + 1) + ". " + label,
+      onclick: () => goBackTo(i)
+    }));
+  });
+  document.getElementById("backBtn").disabled = state.history.length < 2;
+
+  // --- 저장된 주제 ---
+  const savedUl = document.getElementById("saved");
+  savedUl.innerHTML = "";
+  if (state.saved.length === 0) {
+    savedUl.append(el("li", { textContent: "아직 저장한 주제가 없어요", className: "empty" }));
+    savedUl.lastChild.style.cssText = "background:none;color:#6b7a90;cursor:default;padding:0";
+  }
+  state.saved.forEach(label => {
+    const x = el("span", {
+      className: "x", textContent: "✕", title: "삭제",
+      onclick: (ev) => {
+        ev.stopPropagation();
+        state.saved = state.saved.filter(s => s !== label);
+        update();
+      }
+    });
+    savedUl.append(el("li", { onclick: () => startFrom(label) },
+      el("span", { textContent: "🔖 " + label }), x));
+  });
+}
+
+function update() {       // 상태가 바뀌면 → 저장하고 → 다시 그리기
+  saveState();
+  renderMap();
+  renderPanel();
+}
+
+/* =========================================================
+   5. 사용자 행동 (클릭, 검색, 뒤로가기)
+   ========================================================= */
+function onNodeClick(label) {
+  state.selected = label;
+
+  // 하위 키워드가 있으면 펼치기/접기
+  if (childrenOf(label).length > 0) {
+    if (state.expanded.includes(label)) {
+      state.expanded = state.expanded.filter(l => l !== label);
+    } else {
+      state.expanded.push(label);
+    }
+  }
+  // 탐색 경로에 기록 (같은 곳 연속 클릭은 중복 기록 안 함)
+  if (state.history[state.history.length - 1] !== label) {
+    state.history.push(label);
+  }
+  update();
+}
+
+function goBackTo(index) {            // 탐색 경로의 i번째 지점으로 돌아가기
+  state.history = state.history.slice(0, index + 1);
+  state.selected = state.history[index];
+  update();
+}
+
+function startFrom(label) {           // label을 출발점으로 지도를 새로 시작
+  state = { ...state, root: label, expanded: [label], selected: label, history: [label] };
+  update();
+  fitView();
+}
+
+document.getElementById("backBtn").onclick = () => {
+  if (state.history.length > 1) goBackTo(state.history.length - 2);
+};
+
+document.getElementById("searchForm").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const input = document.getElementById("searchInput");
+  const text = input.value.trim();
+  if (!text) return;
+  // 대소문자 무시하고 샘플 데이터에서 찾기. 없으면 입력한 글자 그대로 시작
+  const found = Object.keys(DATA).find(k => k.toLowerCase() === text.toLowerCase());
+  startFrom(found || text);
+  input.value = "";
+});
+
+/* =========================================================
+   6. 지도 이동 / 확대 (드래그, 스크롤, 버튼)
+   ========================================================= */
+function applyView() {
+  viewport.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`);
+}
+
+function fitView() {                   // 지도 전체가 한눈에 보이게 맞추기
+  if (!current.length) return;
+  const r = svg.getBoundingClientRect();
+  const minX = Math.min(...current.map(n => n.x));
+  const maxX = Math.max(...current.map(n => n.x + n.w + 14));
+  const minY = Math.min(...current.map(n => n.y)) - NODE_H;
+  const maxY = Math.max(...current.map(n => n.y)) + NODE_H;
+  const k = Math.min(1.2, r.width / (maxX - minX + 80), r.height / (maxY - minY + 80));
+  view.k = k;
+  view.x = r.width / 2 - ((minX + maxX) / 2) * k;
+  view.y = r.height / 2 - ((minY + maxY) / 2) * k;
+  applyView();
+}
+
+function zoomAt(factor, cx, cy) {      // (cx, cy) 지점을 기준으로 확대/축소
+  const newK = Math.min(2.5, Math.max(0.3, view.k * factor));
+  const real = newK / view.k;
+  view.x = cx - (cx - view.x) * real;
+  view.y = cy - (cy - view.y) * real;
+  view.k = newK;
+  applyView();
+}
+
+let dragging = false, moved = false, startX = 0, startY = 0, startVX = 0, startVY = 0;
+
+svg.addEventListener("pointerdown", (e) => {
+  dragging = true; moved = false;
+  startX = e.clientX; startY = e.clientY;
+  startVX = view.x; startVY = view.y;
+});
+window.addEventListener("pointermove", (e) => {
+  if (!dragging) return;
+  const dx = e.clientX - startX, dy = e.clientY - startY;
+  if (Math.abs(dx) + Math.abs(dy) > 4) {
+    moved = true;
+    svg.classList.add("dragging");
+  }
+  if (moved) {
+    view.x = startVX + dx;
+    view.y = startVY + dy;
+    applyView();
+  }
+});
+window.addEventListener("pointerup", () => {
+  dragging = false;
+  svg.classList.remove("dragging");
+  setTimeout(() => { moved = false; }, 0);   // 드래그 직후 클릭이 노드에 먹히지 않게
+});
+
+svg.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const r = svg.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+
+function zoomFromCenter(f) {
+  const r = svg.getBoundingClientRect();
+  zoomAt(f, r.width / 2, r.height / 2);
+}
+document.getElementById("zoomIn").onclick = () => zoomFromCenter(1.25);
+document.getElementById("zoomOut").onclick = () => zoomFromCenter(0.8);
+document.getElementById("fitBtn").onclick = fitView;
+window.addEventListener("resize", fitView);
+
+/* =========================================================
+   7. 시작!
+   ========================================================= */
+renderMap();
+renderPanel();
+fitView();
+</script>
+</body>
+</html>
