@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "research-map.schema.json",
+  "title": "ReseaMate Research Map",
+  "type": "object",
+  "required": ["version", "map", "nodes", "edges", "savedTopics", "history", "historyCursor"],
+  "properties": {
+    "version": { "const": 1 },
+    "map": {
+      "type": "object",
+      "required": ["id", "title", "rootNodeId"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "rootNodeId": { "type": "string", "description": "사용자가 처음 입력한 연구 주제 노드" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+    "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } },
+    "savedTopics": { "type": "array", "items": { "$ref": "#/$defs/savedTopic" } },
+    "history": { "type": "array", "items": { "$ref": "#/$defs/historyEntry" } },
+    "historyCursor": { "type": "integer", "minimum": -1, "description": "history 배열에서 현재 위치 (뒤로/앞으로 이동용)" }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["id", "type", "label", "visible"],
+      "properties": {
+        "id": { "type": "string", "description": "keyword: 'kw:<slug>', paper: 'paper:<OpenAlex W id>'" },
+        "type": { "enum": ["keyword", "paper"] },
+        "label": { "type": "string", "description": "keyword는 키워드명, paper는 논문 제목" },
+        "visible": { "type": "boolean", "description": "false면 아직 확장되지 않아 지도에 안 보임" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "source": { "enum": ["user", "openalex", "mock"], "description": "keyword 전용: 출처" },
+        "score": { "type": "number", "description": "keyword 전용: OpenAlex 관련도 점수 (0~1)" },
+        "authors": { "type": "array", "items": { "type": "string" }, "description": "paper 전용" },
+        "year": { "type": ["integer", "null"] },
+        "venue": { "type": ["string", "null"] },
+        "citedBy": { "type": ["integer", "null"] },
+        "doi": { "type": ["string", "null"] },
+        "openalexId": { "type": ["string", "null"] }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["id", "source", "target", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "source": { "type": "string", "description": "node.id" },
+        "target": { "type": "string", "description": "node.id" },
+        "type": { "enum": ["keyword-keyword", "paper-keyword"] },
+        "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+        "relation": { "type": "string", "description": "관계 설명 (예: 'co-occurs', 'paper-keyword', 'user')" }
+      }
+    },
+    "savedTopic": {
+      "type": "object",
+      "required": ["id", "nodeId", "label", "savedAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "nodeId": { "type": "string" },
+        "label": { "type": "string" },
+        "savedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "historyEntry": {
+      "type": "object",
+      "required": ["id", "nodeId", "action", "at"],
+      "properties": {
+        "id": { "type": "string" },
+        "nodeId": { "type": "string" },
+        "action": { "enum": ["search", "expand", "visit", "save"] },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

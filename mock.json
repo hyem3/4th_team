@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "map": { "id": "map-1", "title": "AI 연구 탐색", "rootNodeId": "kw:ai", "createdAt": "2026-11-10T09:00:00Z" },
+  "nodes": [
+    { "id": "kw:ai", "type": "keyword", "label": "AI", "visible": true, "source": "user" },
+    { "id": "kw:machine-learning", "type": "keyword", "label": "머신러닝", "visible": true, "source": "mock" },
+    { "id": "kw:nlp", "type": "keyword", "label": "자연어 처리", "visible": true, "source": "mock" },
+    { "id": "kw:deep-learning", "type": "keyword", "label": "딥러닝", "visible": true, "source": "mock" },
+    { "id": "kw:reinforcement-learning", "type": "keyword", "label": "강화학습", "visible": true, "source": "mock" },
+    { "id": "kw:text-analysis", "type": "keyword", "label": "텍스트 분석", "visible": true, "source": "mock" },
+    { "id": "kw:sentiment-analysis", "type": "keyword", "label": "감성분석", "visible": true, "source": "mock" },
+    { "id": "paper:W2896457183", "type": "paper", "label": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding", "authors": ["Jacob Devlin", "Ming-Wei Chang", "Kenton Lee", "Kristina Toutanova"], "year": 2019, "venue": "NAACL", "visible": true },
+    { "id": "paper:mock-multimodal", "type": "paper", "label": "Multimodal Machine Learning: A Survey and Taxonomy", "authors": ["Tadas Baltrušaitis", "Chaitanya Ahuja", "Louis-Philippe Morency"], "year": 2019, "venue": "TPAMI", "visible": true },
+
+    { "id": "kw:transformer", "type": "keyword", "label": "트랜스포머", "visible": false, "source": "mock" },
+    { "id": "kw:pretrained-model", "type": "keyword", "label": "사전학습 모델", "visible": false, "source": "mock" },
+    { "id": "kw:multimodal-learning", "type": "keyword", "label": "멀티모달 학습", "visible": false, "source": "mock" },
+    { "id": "kw:computer-vision", "type": "keyword", "label": "컴퓨터 비전", "visible": false, "source": "mock" },
+    { "id": "kw:opinion-mining", "type": "keyword", "label": "오피니언 마이닝", "visible": false, "source": "mock" },
+    { "id": "paper:mock-attention", "type": "paper", "label": "Attention Is All You Need", "authors": ["Ashish Vaswani", "Noam Shazeer", "Niki Parmar"], "year": 2017, "venue": "NeurIPS", "visible": false }
+  ],
+  "edges": [
+    { "id": "e1", "source": "kw:ai", "target": "kw:machine-learning", "type": "keyword-keyword", "weight": 0.9 },
+    { "id": "e2", "source": "kw:ai", "target": "kw:nlp", "type": "keyword-keyword", "weight": 0.8 },
+    { "id": "e3", "source": "kw:machine-learning", "target": "kw:deep-learning", "type": "keyword-keyword", "weight": 0.8 },
+    { "id": "e4", "source": "kw:machine-learning", "target": "kw:reinforcement-learning", "type": "keyword-keyword", "weight": 0.6 },
+    { "id": "e5", "source": "kw:nlp", "target": "kw:text-analysis", "type": "keyword-keyword", "weight": 0.7 },
+    { "id": "e6", "source": "kw:nlp", "target": "kw:sentiment-analysis", "type": "keyword-keyword", "weight": 0.7 },
+    { "id": "e7", "source": "paper:W2896457183", "target": "kw:nlp", "type": "paper-keyword", "weight": 0.9 },
+    { "id": "e8", "source": "paper:mock-multimodal", "target": "kw:machine-learning", "type": "paper-keyword", "weight": 0.8 },
+
+    { "id": "e9", "source": "paper:W2896457183", "target": "kw:pretrained-model", "type": "paper-keyword", "weight": 0.9 },
+    { "id": "e10", "source": "kw:deep-learning", "target": "kw:transformer", "type": "keyword-keyword", "weight": 0.8 },
+    { "id": "e11", "source": "kw:pretrained-model", "target": "kw:transformer", "type": "keyword-keyword", "weight": 0.7 },
+    { "id": "e12", "source": "kw:machine-learning", "target": "kw:multimodal-learning", "type": "keyword-keyword", "weight": 0.6 },
+    { "id": "e13", "source": "paper:mock-multimodal", "target": "kw:multimodal-learning", "type": "paper-keyword", "weight": 0.9 },
+    { "id": "e14", "source": "kw:deep-learning", "target": "kw:computer-vision", "type": "keyword-keyword", "weight": 0.7 },
+    { "id": "e15", "source": "kw:sentiment-analysis", "target": "kw:opinion-mining", "type": "keyword-keyword", "weight": 0.9 },
+    { "id": "e16", "source": "paper:mock-attention", "target": "kw:transformer", "type": "paper-keyword", "weight": 0.9 }
+  ],
+  "savedTopics": [
+    { "id": "s1", "nodeId": "kw:machine-learning", "label": "머신러닝", "savedAt": "2026-11-10T09:05:00Z" },
+    { "id": "s2", "nodeId": "kw:reinforcement-learning", "label": "강화학습", "savedAt": "2026-11-10T09:06:00Z" },
+    { "id": "s3", "nodeId": "kw:sentiment-analysis", "label": "감성분석", "savedAt": "2026-11-10T09:07:00Z" }
+  ],
+  "history": [
+    { "id": "h1", "nodeId": "kw:ai", "action": "search", "at": "2026-11-10T09:00:00Z" }
+  ],
+  "historyCursor": 0
+}

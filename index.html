@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ReseaMate – Research Map</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="nav">
+    <div class="logo">ReseaMate</div>
+    <a class="active">Explore</a>
+    <a class="off" title="Step 2에서 구현">Connect</a>
+    <a class="off">Account</a>
+  </aside>
+
+  <main>
+    <header>
+      <input id="search" placeholder="Search for new keywords... (Enter)" autocomplete="off">
+      <div class="tools">
+        <button id="back" title="이전 탐색 지점">←</button>
+        <button id="fwd" title="다음 탐색 지점">→</button>
+        <button id="fit">전체 보기</button>
+        <button id="reset">초기화</button>
+      </div>
+    </header>
+    <svg id="map"></svg>
+    <div class="hint">키워드의 + 로 확장, 드래그로 이동, 스크롤로 확대</div>
+  </main>
+
+  <aside class="panel">
+    <section><h3>선택한 노드</h3><div id="detail" class="muted">노드를 클릭하세요</div></section>
+    <section><h3>저장된 주제</h3><ul id="saved"></ul></section>
+    <section><h3>탐색 히스토리</h3><ol id="history"></ol></section>
+  </aside>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
