@@ -1,0 +1,7 @@
+{
+  "id": "edge_001",
+  "source": "keyword_001",
+  "target": "paper_001",
+  "relation": "related_to",
+  "weight": 0.85
+}
