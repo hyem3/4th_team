@@ -1,0 +1,63 @@
+/**
+ * researchMapData.js
+ * ------------------------------------------------------------------
+ * Research Map 샘플 데이터 (미리 정의된 데모 데이터)
+ *
+ * ※ 이 파일은 "화면에 그릴 데이터"만 담고 있음.
+ *    키워드를 추가/삭제/이동하고 싶으면 이 파일만 수정하기.
+ *    (실제 논문 검색 결과나 AI 추천 결과가 아닌 예시 데이터.)
+ *
+ * [nodes]  화면에 표시할 노드
+ *   - id    : 고유 ID (edges에서 이 값을 참조)
+ *   - label : 화면에 보이는 이름
+ *   - level : 0 = 초기 연구 주제(중앙), 1 = 1단계 키워드, 2/3 = 확장 키워드
+ *   - x, y  : 노드 중심의 초기 위치 (캔버스 좌표계. 대략 0~1000 x 0~650 범위)
+ *
+ * [edges]  노드 사이의 연결선
+ *   - source, target : 연결할 두 노드의 id
+ *   - type  : "core"   → 연구 주제와 1단계 키워드를 잇는 실선
+ *             "branch" → 키워드에서 하위 키워드로 확장되는 점선(dash)
+ *             "cross"  → 서로 다른 갈래의 키워드를 잇는 교차 연결(dot)
+ *   - bend  : (선택) 선의 휘어짐 정도. 양수/음수로 휘는 방향이 바뀝니다. 기본값은 type별로 정해져 있음.
+ */
+export const researchMapData = {
+  topic: "AI",
+
+  nodes: [
+    // 초기 연구 주제 (중앙)
+    { id: "ai", label: "AI", level: 0, x: 500, y: 335 },
+
+    // 1단계 키워드
+    { id: "ml", label: "머신러닝", level: 1, x: 300, y: 200 },
+    { id: "nlp", label: "자연어 처리", level: 1, x: 710, y: 205 },
+    { id: "cv", label: "컴퓨터 비전", level: 1, x: 525, y: 545 },
+
+    // 머신러닝 하위
+    { id: "dl", label: "딥러닝", level: 2, x: 190, y: 420 },
+    { id: "rl", label: "강화학습", level: 2, x: 105, y: 165 },
+
+    // 자연어 처리 하위
+    { id: "text", label: "텍스트 분석", level: 2, x: 880, y: 105 },
+    { id: "sent", label: "감성분석", level: 3, x: 915, y: 305 },
+  ],
+
+  edges: [
+    // AI → 1단계 키워드
+    { source: "ai", target: "ml", type: "core" },
+    { source: "ai", target: "nlp", type: "core" },
+    { source: "ai", target: "cv", type: "core" },
+
+    // 1단계 → 하위 키워드
+    { source: "ml", target: "dl", type: "branch" },
+    { source: "ml", target: "rl", type: "branch" },
+    { source: "nlp", target: "text", type: "branch" },
+    { source: "text", target: "sent", type: "branch" },
+
+    // 갈래를 가로지르는 교차 연결
+    { source: "dl", target: "cv", type: "cross", bend: 0.2 },
+    { source: "ml", target: "nlp", type: "cross", bend: -0.28 },
+    { source: "cv", target: "nlp", type: "cross", bend: -0.2 },
+  ],
+};
+
+export default researchMapData;
