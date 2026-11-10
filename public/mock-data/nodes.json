@@ -1,0 +1,12 @@
+[
+  {
+    "id": "keyword_001",
+    "type": "keyword",
+    "label": "Artificial Intelligence"
+  },
+  {
+    "id": "paper_001",
+    "type": "paper",
+    "label": "AI in Information Retrieval"
+  }
+]
