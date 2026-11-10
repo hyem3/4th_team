@@ -1,0 +1,608 @@
+/**
+ * ResearchMapCanvas.js
+ * ------------------------------------------------------------------
+ * ReseaMate · Explore 페이지의 "Research Map Canvas" 컴포넌트
+ *
+ * - 외부 라이브러리 없음 (순수 JavaScript + SVG)
+ * - React / Vue / Next.js / 순수 HTML 어디서든 사용 가능
+ * - 사용법:
+ *     import { mountResearchMap } from "./ResearchMapCanvas.js";
+ *     const map = mountResearchMap(document.getElementById("map"), {
+ *       data: myData,                  // (선택) 기본값: ./researchMapData.js
+ *       onSelect: (node) => { ... },   // (선택) 노드 선택 시 호출. 선택 해제 시 null
+ *     });
+ *     map.destroy();                   // 화면에서 제거할 때 호출
+ *
+ * - 부모 요소에는 반드시 "높이"를 지정해 주세요. (없으면 최소 420px)
+ *
+ * 구성:
+ *   1) 상수/유틸
+ *   2) 지형도(Topographic) 배경 생성  - marching squares 알고리즘
+ *   3) mountResearchMap()             - 노드·연결선·인터랙션
+ */
+
+import { researchMapData } from "./researchMapData.js";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/* ------------------------------------------------------------------
+ * 1) 상수 / 유틸
+ * ------------------------------------------------------------------ */
+
+// 노드 단계(level)별 크기 설정. 색상은 ResearchMapCanvas.css에서 지정합니다.
+const LEVEL_STYLE = {
+  0: { fontSize: 30, fontWeight: 700, padX: 34, padY: 18, radius: 9 },
+  1: { fontSize: 18, fontWeight: 600, padX: 22, padY: 12, radius: 7 },
+  2: { fontSize: 16, fontWeight: 500, padX: 18, padY: 10, radius: 6 },
+  3: { fontSize: 15, fontWeight: 500, padX: 16, padY: 9, radius: 6 },
+};
+
+// 연결선 type별 기본 휘어짐 정도
+const DEFAULT_BEND = { core: 0.1, branch: 0.16, cross: 0.22 };
+
+// 줌 설정
+const MAX_ZOOM = 2.6;
+const ZOOM_STEP = 1.25;
+const FIT_PADDING = 84; // 화면 맞춤 시 바깥 여백(px)
+
+// 우하단 범례 항목
+const LEGEND_NODES = [
+  { cls: "rm-legend__swatch--l0", text: "초기 연구 주제" },
+  { cls: "rm-legend__swatch--l1", text: "1단계 키워드" },
+  { cls: "rm-legend__swatch--l2", text: "확장 키워드" },
+];
+const LEGEND_EDGES = [
+  { cls: "rm-legend__line--core", text: "직접 연결" },
+  { cls: "rm-legend__line--branch", text: "확장 연결" },
+  { cls: "rm-legend__line--cross", text: "교차 연결" },
+];
+
+let instanceCount = 0; // SVG filter id 충돌 방지용
+
+function svgEl(name, attrs, parent) {
+  const node = document.createElementNS(SVG_NS, name);
+  if (attrs) for (const k in attrs) node.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+
+function htmlEl(name, className, parent, text) {
+  const node = document.createElement(name);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  if (parent) parent.appendChild(node);
+  return node;
+}
+
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+const levelOf = (n) => Math.min(Math.max(n.level | 0, 0), 3);
+
+// 글자 폭 추정 (실제 측정이 불가능할 때만 사용)
+function estimateTextWidth(text, size) {
+  let w = 0;
+  for (const ch of text) {
+    const c = ch.codePointAt(0);
+    if ((c >= 0xac00 && c <= 0xd7a3) || (c >= 0x3040 && c <= 0x9fff)) w += 1;
+    else if (ch === " ") w += 0.32;
+    else if (ch >= "A" && ch <= "Z") w += 0.7;
+    else w += 0.56;
+  }
+  return w * size;
+}
+
+// 노드(사각형) 테두리와 직선이 만나는 점 → 연결선이 노드 안쪽으로 파고들지 않게 함
+function clipToRect(node, tx, ty, gap) {
+  const dx = tx - node.x;
+  const dy = ty - node.y;
+  if (!dx && !dy) return { x: node.x, y: node.y };
+  const hw = node.w / 2 + gap;
+  const hh = node.h / 2 + gap;
+  const t = Math.min(dx ? hw / Math.abs(dx) : Infinity, dy ? hh / Math.abs(dy) : Infinity);
+  return { x: node.x + dx * t, y: node.y + dy * t };
+}
+
+// 두 노드를 잇는 부드러운 2차 베지어 곡선
+function edgePath(a, b, bend) {
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const cx = mx - dy * bend;
+  const cy = my + dx * bend;
+  const p1 = clipToRect(a, cx, cy, 4);
+  const p2 = clipToRect(b, cx, cy, 4);
+  return `M${p1.x.toFixed(1)},${p1.y.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+}
+
+/* ------------------------------------------------------------------
+ * 2) 지형도(Topographic) 배경
+ *    - 부드러운 "높이 지도"를 만들고, 같은 높이를 잇는 등고선을 그립니다.
+ *    - 모양을 바꾸고 싶으면 TOPO_BUMPS 값(언덕 위치/크기)을 수정하세요.
+ * ------------------------------------------------------------------ */
+
+const TOPO_BOUNDS = { x0: -1500, y0: -1000, x1: 2500, y1: 1600 };
+const TOPO_CELL = 24; // 작을수록 부드럽지만 느려짐
+const TOPO_LEVELS = 40; // 등고선 개수
+const TOPO_MAJOR_EVERY = 4; // N번째 등고선은 조금 더 진하게
+
+// [중심 x, 중심 y, 퍼짐(sigma), 높이]
+const TOPO_BUMPS = [
+  [280, 150, 270, 1.0],
+  [800, 470, 320, 0.95],
+  [560, -60, 230, 0.6],
+  [1050, 40, 210, 0.55],
+  [60, 560, 250, 0.75],
+  [520, 340, 420, 0.45],
+  [-420, 200, 330, 0.8],
+  [1500, 380, 360, 0.8],
+  [500, 900, 380, 0.7],
+  [400, -520, 340, 0.7],
+];
+
+function topoHeight(x, y) {
+  let h = 0;
+  for (const [cx, cy, s, a] of TOPO_BUMPS) {
+    const dx = x - cx;
+    const dy = y - cy;
+    h += a * Math.exp(-(dx * dx + dy * dy) / (2 * s * s));
+  }
+  h += 0.1 * Math.sin(x / 165 + y / 250) + 0.08 * Math.cos(y / 135 - x / 300);
+  return h;
+}
+
+// marching squares: 격자 높이값 → 등고선 선분 → 이어 붙인 부드러운 path 문자열
+function buildContourPaths() {
+  const { x0, y0, x1, y1 } = TOPO_BOUNDS;
+  const nx = Math.ceil((x1 - x0) / TOPO_CELL) + 1;
+  const ny = Math.ceil((y1 - y0) / TOPO_CELL) + 1;
+
+  const field = new Float32Array(nx * ny);
+  let min = Infinity;
+  let max = -Infinity;
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      const v = topoHeight(x0 + i * TOPO_CELL, y0 + j * TOPO_CELL);
+      field[j * nx + i] = v;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+  }
+
+  // 각 케이스(상위 비트: 좌상 8, 우상 4, 우하 2, 좌하 1)에서 이어지는 변. T=위 R=오른쪽 B=아래 L=왼쪽
+  const CASES = {
+    1: ["LB"], 2: ["BR"], 3: ["LR"], 4: ["TR"], 6: ["TB"], 7: ["TL"], 8: ["TL"],
+    9: ["TB"], 11: ["TR"], 12: ["LR"], 13: ["BR"], 14: ["LB"],
+  };
+
+  const minor = [];
+  const major = [];
+
+  for (let li = 1; li <= TOPO_LEVELS; li++) {
+    const level = min + ((max - min) * li) / (TOPO_LEVELS + 1);
+    const segs = [];
+    const pts = new Map();
+    const adj = new Map();
+
+    const edgePoint = (kind, i, j) => {
+      const key = kind + i + "," + j;
+      if (!pts.has(key)) {
+        const ia = [i, j];
+        const ib = kind === "h" ? [i + 1, j] : [i, j + 1];
+        const va = field[ia[1] * nx + ia[0]];
+        const vb = field[ib[1] * nx + ib[0]];
+        const t = (level - va) / (vb - va);
+        pts.set(key, {
+          x: x0 + (ia[0] + (ib[0] - ia[0]) * t) * TOPO_CELL,
+          y: y0 + (ia[1] + (ib[1] - ia[1]) * t) * TOPO_CELL,
+        });
+      }
+      return key;
+    };
+
+    for (let j = 0; j < ny - 1; j++) {
+      for (let i = 0; i < nx - 1; i++) {
+        const tl = field[j * nx + i] >= level;
+        const tr = field[j * nx + i + 1] >= level;
+        const br = field[(j + 1) * nx + i + 1] >= level;
+        const bl = field[(j + 1) * nx + i] >= level;
+        const code = (tl ? 8 : 0) | (tr ? 4 : 0) | (br ? 2 : 0) | (bl ? 1 : 0);
+        if (code === 0 || code === 15) continue;
+
+        let pairs = CASES[code];
+        if (code === 5 || code === 10) {
+          // 안장점(saddle): 중앙 값으로 연결 방식 결정
+          const center = (field[j * nx + i] + field[j * nx + i + 1] + field[(j + 1) * nx + i + 1] + field[(j + 1) * nx + i]) / 4 >= level;
+          if (code === 5) pairs = center ? ["TL", "BR"] : ["TR", "LB"];
+          else pairs = center ? ["TR", "LB"] : ["TL", "BR"];
+        }
+
+        const keyOf = { T: () => edgePoint("h", i, j), B: () => edgePoint("h", i, j + 1), L: () => edgePoint("v", i, j), R: () => edgePoint("v", i + 1, j) };
+        for (const p of pairs) {
+          const k1 = keyOf[p[0]]();
+          const k2 = keyOf[p[1]]();
+          const idx = segs.length;
+          segs.push([k1, k2, false]);
+          if (!adj.has(k1)) adj.set(k1, []);
+          if (!adj.has(k2)) adj.set(k2, []);
+          adj.get(k1).push(idx);
+          adj.get(k2).push(idx);
+        }
+      }
+    }
+
+    // 선분들을 이어서 긴 곡선으로
+    const extend = (chain, atEnd) => {
+      for (;;) {
+        const key = atEnd ? chain[chain.length - 1] : chain[0];
+        const next = (adj.get(key) || []).find((s) => !segs[s][2]);
+        if (next === undefined) return;
+        segs[next][2] = true;
+        const other = segs[next][0] === key ? segs[next][1] : segs[next][0];
+        if (atEnd) chain.push(other);
+        else chain.unshift(other);
+        if (other === (atEnd ? chain[0] : chain[chain.length - 1])) return; // 닫힌 곡선
+      }
+    };
+
+    const target = li % TOPO_MAJOR_EVERY === 0 ? major : minor;
+    for (let s = 0; s < segs.length; s++) {
+      if (segs[s][2]) continue;
+      segs[s][2] = true;
+      const chain = [segs[s][0], segs[s][1]];
+      extend(chain, true);
+      extend(chain, false);
+      if (chain.length < 4) continue; // 너무 짧은 조각은 생략
+      const p = chain.map((k) => pts.get(k));
+      const f = (v) => v.toFixed(1);
+      let d = `M${f(p[0].x)},${f(p[0].y)}`;
+      for (let n = 1; n < p.length - 1; n++) {
+        d += `Q${f(p[n].x)},${f(p[n].y)} ${f((p[n].x + p[n + 1].x) / 2)},${f((p[n].y + p[n + 1].y) / 2)}`;
+      }
+      d += `L${f(p[p.length - 1].x)},${f(p[p.length - 1].y)}`;
+      target.push(d);
+    }
+  }
+  return { minor: minor.join(""), major: major.join("") };
+}
+
+// 지형도는 한 번만 계산해서 재사용
+let topoCache = null;
+function getTopoPaths() {
+  if (!topoCache) topoCache = buildContourPaths();
+  return topoCache;
+}
+
+/* ------------------------------------------------------------------
+ * 3) mountResearchMap
+ * ------------------------------------------------------------------ */
+
+export function mountResearchMap(container, options = {}) {
+  const data = options.data || researchMapData;
+  const onSelect = typeof options.onSelect === "function" ? options.onSelect : null;
+  const uid = ++instanceCount;
+  const shadowId = `rm-shadow-${uid}`;
+
+  container.classList.add("rm-canvas");
+  container.textContent = "";
+
+  /* ---------- SVG 뼈대 ---------- */
+  const svg = svgEl("svg", { class: "rm-svg", role: "group", "aria-label": `${data.topic} Research Map` }, container);
+  const defs = svgEl("defs", null, svg);
+  const shadow = svgEl("filter", { id: shadowId, x: "-20%", y: "-30%", width: "140%", height: "170%" }, defs);
+  svgEl("feDropShadow", { dx: 0, dy: 2, stdDeviation: 3, "flood-color": "#0B2A5B", "flood-opacity": 0.14 }, shadow);
+
+  const world = svgEl("g", { class: "rm-world" }, svg); // 줌/이동이 적용되는 그룹
+  const topo = svgEl("g", { class: "rm-topo", "aria-hidden": "true" }, world);
+  const edgeLayer = svgEl("g", { class: "rm-edges" }, world);
+  const nodeLayer = svgEl("g", { class: "rm-nodes" }, world);
+
+  const paths = getTopoPaths();
+  svgEl("path", { class: "rm-topo__line", d: paths.minor }, topo);
+  svgEl("path", { class: "rm-topo__line rm-topo__line--major", d: paths.major }, topo);
+
+  /* ---------- 노드 만들기 ---------- */
+  const nodes = new Map();
+  data.nodes.forEach((src) => {
+    const n = { ...src, level: levelOf(src), w: 0, h: 0 };
+    const style = LEVEL_STYLE[n.level];
+    n.g = svgEl(
+      "g",
+      { class: `rm-node rm-node--l${n.level}`, tabindex: 0, role: "button", "aria-pressed": "false", "aria-label": n.label, "data-id": n.id },
+      nodeLayer
+    );
+    n.halo = svgEl("rect", { class: "rm-node__halo" }, n.g);
+    n.box = svgEl("rect", { class: "rm-node__box", filter: `url(#${shadowId})` }, n.g);
+    n.text = svgEl("text", { class: "rm-node__label", "font-size": style.fontSize, "font-weight": style.fontWeight, dy: ".35em" }, n.g);
+    n.text.textContent = n.label;
+    nodes.set(n.id, n);
+  });
+
+  /* ---------- 연결선 만들기 ---------- */
+  const edges = [];
+  const edgesByNode = new Map();
+  data.edges.forEach((e) => {
+    const a = nodes.get(e.source);
+    const b = nodes.get(e.target);
+    if (!a || !b) {
+      console.warn(`[ResearchMap] 알 수 없는 노드를 가리키는 연결선: ${e.source} → ${e.target}`);
+      return;
+    }
+    const type = e.type in DEFAULT_BEND ? e.type : "branch";
+    const edge = {
+      a,
+      b,
+      bend: e.bend ?? DEFAULT_BEND[type],
+      el: svgEl("path", { class: `rm-edge rm-edge--${type}` }, edgeLayer),
+    };
+    edges.push(edge);
+    [a.id, b.id].forEach((id) => {
+      if (!edgesByNode.has(id)) edgesByNode.set(id, []);
+      edgesByNode.get(id).push(edge);
+    });
+  });
+
+  /* ---------- 노드 크기 계산 / 위치 반영 ---------- */
+  function sizeNode(n) {
+    const style = LEVEL_STYLE[n.level];
+    let tw = 0;
+    try {
+      tw = n.text.getComputedTextLength();
+    } catch (err) {
+      tw = 0;
+    }
+    if (!tw) tw = estimateTextWidth(n.label, style.fontSize);
+    n.w = Math.ceil(tw + style.padX * 2);
+    n.h = style.fontSize + style.padY * 2;
+    const set = (rect, grow, r) => {
+      rect.setAttribute("x", -n.w / 2 - grow);
+      rect.setAttribute("y", -n.h / 2 - grow);
+      rect.setAttribute("width", n.w + grow * 2);
+      rect.setAttribute("height", n.h + grow * 2);
+      rect.setAttribute("rx", r + grow * 0.6);
+    };
+    set(n.box, 0, style.radius);
+    set(n.halo, 8, style.radius);
+  }
+
+  function placeNode(n) {
+    n.g.setAttribute("transform", `translate(${n.x.toFixed(1)} ${n.y.toFixed(1)})`);
+  }
+
+  function updateEdges(list) {
+    list.forEach((e) => e.el.setAttribute("d", edgePath(e.a, e.b, e.bend)));
+  }
+
+  function layoutAll() {
+    nodes.forEach((n) => {
+      sizeNode(n);
+      placeNode(n);
+    });
+    updateEdges(edges);
+  }
+  layoutAll();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(layoutAll);
+
+  /* ---------- 선택 상태 ---------- */
+  let selectedId = null;
+
+  function applySelection() {
+    svg.classList.toggle("has-selection", selectedId !== null);
+    const related = new Set();
+    edges.forEach((e) => {
+      const active = selectedId !== null && (e.a.id === selectedId || e.b.id === selectedId);
+      e.el.classList.toggle("is-active", active);
+      if (active) {
+        related.add(e.a.id);
+        related.add(e.b.id);
+      }
+    });
+    nodes.forEach((n) => {
+      const isSel = n.id === selectedId;
+      n.g.classList.toggle("is-selected", isSel);
+      n.g.classList.toggle("is-neighbor", !isSel && related.has(n.id));
+      n.g.setAttribute("aria-pressed", String(isSel));
+    });
+  }
+
+  function select(id, silent) {
+    const next = id && nodes.has(id) ? id : null;
+    if (next === selectedId) return;
+    selectedId = next;
+    applySelection();
+    if (!silent && onSelect) {
+      const n = next ? nodes.get(next) : null;
+      onSelect(n ? { id: n.id, label: n.label, level: n.level, x: n.x, y: n.y } : null);
+    }
+  }
+
+  /* ---------- 줌 / 이동 ---------- */
+  const view = { x: 0, y: 0, k: 1 };
+  let fitK = 1; // "화면 맞춤" 배율 (줌 % 표시의 기준 = 100%)
+  let minK = 0.3;
+  let size = { w: 0, h: 0 };
+  let userAdjusted = false; // 사용자가 직접 줌/이동했는가 (리사이즈 시 자동 맞춤 여부)
+
+  const zoomLabel = { el: null };
+
+  function applyView() {
+    world.setAttribute("transform", `translate(${view.x.toFixed(2)} ${view.y.toFixed(2)}) scale(${view.k.toFixed(4)})`);
+    if (zoomLabel.el) zoomLabel.el.textContent = `${Math.round((view.k / fitK) * 100)}%`;
+  }
+
+  function fitView() {
+    if (!size.w || !size.h) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    nodes.forEach((n) => {
+      x0 = Math.min(x0, n.x - n.w / 2);
+      x1 = Math.max(x1, n.x + n.w / 2);
+      y0 = Math.min(y0, n.y - n.h / 2);
+      y1 = Math.max(y1, n.y + n.h / 2);
+    });
+    const bw = Math.max(x1 - x0, 1);
+    const bh = Math.max(y1 - y0, 1);
+    const pad = Math.min(FIT_PADDING, size.w * 0.06, size.h * 0.14); // 작은 화면일수록 여백을 줄여 지도를 크게
+    fitK = clamp(Math.min((size.w - pad * 2) / bw, (size.h - pad * 2) / bh), 0.1, 1.5);
+    minK = fitK * 0.55;
+    view.k = fitK;
+    view.x = size.w / 2 - ((x0 + x1) / 2) * fitK;
+    view.y = size.h / 2 - ((y0 + y1) / 2) * fitK;
+    applyView();
+  }
+
+  function zoomAt(factor, px, py) {
+    const k = clamp(view.k * factor, minK, MAX_ZOOM);
+    const ratio = k / view.k;
+    view.x = px - (px - view.x) * ratio;
+    view.y = py - (py - view.y) * ratio;
+    view.k = k;
+    userAdjusted = true;
+    applyView();
+  }
+
+  const zoomIn = () => zoomAt(ZOOM_STEP, size.w / 2, size.h / 2);
+  const zoomOut = () => zoomAt(1 / ZOOM_STEP, size.w / 2, size.h / 2);
+  const resetView = () => {
+    userAdjusted = false;
+    fitView();
+  };
+
+  /* ---------- 컨트롤 UI (줌 / 안내 / 범례) ---------- */
+  const controls = htmlEl("div", "rm-controls", container);
+  const mkBtn = (label, aria, handler, html) => {
+    const b = htmlEl("button", "rm-controls__btn", controls);
+    b.type = "button";
+    b.setAttribute("aria-label", aria);
+    b.title = aria;
+    if (html) b.innerHTML = html;
+    else b.textContent = label;
+    b.addEventListener("click", handler);
+    return b;
+  };
+  mkBtn("−", "축소", zoomOut);
+  zoomLabel.el = htmlEl("span", "rm-controls__zoom", controls, "100%");
+  mkBtn("+", "확대", zoomIn);
+  htmlEl("span", "rm-controls__sep", controls);
+  mkBtn(
+    "",
+    "전체 보기",
+    resetView,
+    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>'
+  );
+
+  htmlEl("div", "rm-hint", container, "노드를 드래그해 이동 · 스크롤로 확대/축소");
+
+  const legend = htmlEl("div", "rm-legend", container);
+  const nodeCol = htmlEl("ul", "rm-legend__col", legend);
+  LEGEND_NODES.forEach((item) => {
+    const li = htmlEl("li", "rm-legend__row", nodeCol);
+    htmlEl("span", `rm-legend__swatch ${item.cls}`, li);
+    htmlEl("span", "", li, item.text);
+  });
+  const edgeCol = htmlEl("ul", "rm-legend__col", legend);
+  LEGEND_EDGES.forEach((item) => {
+    const li = htmlEl("li", "rm-legend__row", edgeCol);
+    htmlEl("span", `rm-legend__line ${item.cls}`, li);
+    htmlEl("span", "", li, item.text);
+  });
+
+  /* ---------- 포인터 입력: 노드 드래그 / 배경 이동 / 클릭 선택 ---------- */
+  let drag = null;
+  const DRAG_THRESHOLD = 4; // px — 이보다 적게 움직이면 "클릭"으로 취급
+
+  svg.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const nodeEl = e.target.closest(".rm-node");
+    svg.setPointerCapture(e.pointerId);
+    if (nodeEl) {
+      const n = nodes.get(nodeEl.dataset.id);
+      select(n.id);
+      drag = { type: "node", n, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y, moved: false };
+      nodeEl.classList.add("is-dragging");
+    } else {
+      drag = { type: "pan", sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
+    }
+  });
+
+  svg.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.sx;
+    const dy = e.clientY - drag.sy;
+    if (!drag.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      drag.moved = true;
+      if (drag.type === "pan") svg.classList.add("is-panning");
+    }
+    if (!drag.moved) return;
+    if (drag.type === "node") {
+      drag.n.x = drag.ox + dx / view.k;
+      drag.n.y = drag.oy + dy / view.k;
+      placeNode(drag.n);
+      updateEdges(edgesByNode.get(drag.n.id) || []); // 연결된 선만 다시 그림
+    } else {
+      view.x = drag.ox + dx;
+      view.y = drag.oy + dy;
+      userAdjusted = true;
+      applyView();
+    }
+  });
+
+  const endDrag = (e) => {
+    if (!drag) return;
+    if (drag.type === "node") drag.n.g.classList.remove("is-dragging");
+    else if (!drag.moved) select(null); // 빈 배경 클릭 → 선택 해제
+    svg.classList.remove("is-panning");
+    if (svg.hasPointerCapture && svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+    drag = null;
+  };
+  svg.addEventListener("pointerup", endDrag);
+  svg.addEventListener("pointercancel", endDrag);
+
+  svg.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      const factor = Math.exp(-clamp(e.deltaY, -120, 120) * 0.0016);
+      zoomAt(factor, e.clientX - rect.left, e.clientY - rect.top);
+    },
+    { passive: false }
+  );
+
+  // 키보드 접근성: Enter/Space = 선택, Esc = 선택 해제
+  container.addEventListener("keydown", (e) => {
+    const nodeEl = e.target.closest && e.target.closest(".rm-node");
+    if (nodeEl && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      select(nodeEl.dataset.id);
+    } else if (e.key === "Escape") {
+      select(null);
+    }
+  });
+
+  /* ---------- 크기 변화 대응 ---------- */
+  const ro = new ResizeObserver((entries) => {
+    const r = entries[0].contentRect;
+    if (!r.width || !r.height) return;
+    const first = size.w === 0;
+    size = { w: r.width, h: r.height };
+    if (first) layoutAll(); // 처음 화면에 보이는 순간 글자 폭을 정확히 재측정
+    if (first || !userAdjusted) fitView();
+  });
+  ro.observe(container);
+
+  /* ---------- 외부에서 쓰는 API ---------- */
+  return {
+    select: (id) => select(id),
+    clearSelection: () => select(null),
+    getSelectedId: () => selectedId,
+    zoomIn,
+    zoomOut,
+    resetView,
+    destroy() {
+      ro.disconnect();
+      container.textContent = "";
+      container.classList.remove("rm-canvas");
+    },
+  };
+}
+
+export default mountResearchMap;
