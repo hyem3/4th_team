@@ -1,0 +1,23 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Connect Logic Test</title>
+</head>
+<body>
+  <h2>ReseaMate Step 2 기능 테스트</h2>
+  <pre id="output"></pre>
+
+  <script src="./connect-logic.js"></script>
+  <script>
+    const result = ReseaMateConnect.getConnection(
+      "Adaptive Understanding",
+      "Algorithmic System"
+    );
+
+    document.getElementById("output").textContent =
+      JSON.stringify(result, null, 2);
+  </script>
+</body>
+</html>
