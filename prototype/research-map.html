@@ -3,100 +3,210 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <title>ReseaMate - Research Map</title>
 <style>
   :root {
-    --navy: #0b2a55;
-    --blue: #2f6fd6;
-    --line: #c9d3e3;
-    --bg: #f6f8fc;
+    --ink: #101c44;          /* 제목·진한 글씨 */
+    --text: #2b3558;         /* 본문 */
+    --muted: #7380a3;        /* 보조 글씨 */
+    --indigo: #4a58e0;       /* 포인트 색 */
+    --indigo-deep: #3342c4;
+    --sky: #e8eeff;         /* 연한 파랑 면 */
+    --mist: #f4f7ff;         /* 전체 배경 */
+    --line: #e0e7f7;        /* 테두리 */
+    --white: #fff;
+    --shadow: 0 1px 2px rgba(34,52,120,.06), 0 8px 24px -8px rgba(34,52,120,.16);
+    --shadow-sm: 0 1px 2px rgba(34,52,120,.08), 0 3px 10px -3px rgba(34,52,120,.14);
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; height: 100vh; display: flex; flex-direction: column;
-    font-family: "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
-    background: var(--bg); color: #1b2433;
+    margin: 0; height: 100vh; display: flex;
+    font-family: "Pretendard Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: var(--mist); color: var(--text);
+    -webkit-font-smoothing: antialiased;
   }
+  :focus-visible { outline: 3px solid rgba(74,88,224,.45); outline-offset: 2px; }
 
-  /* ---------- 상단 바 ---------- */
+  /* ---------- 왼쪽 사이드바 ---------- */
+  nav.rail {
+    width: 84px; flex: none; background: var(--white);
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 18px 0; gap: 6px;
+  }
+  .brand-mark {
+    width: 42px; height: 42px; border-radius: 13px; margin-bottom: 18px;
+    background: linear-gradient(135deg, #6a7bff 0%, #3342c4 100%);
+    display: grid; place-items: center; color: #fff;
+    box-shadow: 0 6px 14px -4px rgba(51,66,196,.55);
+  }
+  .nav-item {
+    width: 64px; padding: 9px 0 8px; border-radius: 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    font-size: 11.5px; font-weight: 600; color: var(--muted);
+    background: none; border: 0; cursor: default;
+  }
+  .nav-item svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .nav-item.active { background: var(--sky); color: var(--indigo); }
+  .nav-item[aria-disabled="true"] { opacity: .6; }
+  .nav-spacer { flex: 1; }
+
+  /* ---------- 오른쪽 전체(상단바 + 본문) ---------- */
+  .shell { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
   header {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 22px; background: transparent;
   }
-  .logo { font-weight: 800; font-size: 20px; color: var(--navy); margin-right: 8px; }
-  #searchForm { display: flex; gap: 6px; flex: 1; max-width: 420px; }
+  .logo { font-weight: 800; font-size: 19px; letter-spacing: -.02em; color: var(--ink); margin-right: 6px; }
+  #searchForm {
+    display: flex; flex: 1; max-width: 520px; align-items: center;
+    background: var(--white); border: 1px solid var(--line); border-radius: 999px;
+    padding: 4px 4px 4px 16px; box-shadow: var(--shadow-sm);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  #searchForm:focus-within { border-color: var(--indigo); box-shadow: 0 0 0 4px rgba(74,88,224,.14); }
+  #searchForm svg { width: 18px; height: 18px; stroke: var(--muted); fill: none; stroke-width: 2; stroke-linecap: round; flex: none; }
   #searchInput {
-    flex: 1; padding: 8px 12px; border: 1px solid var(--line);
-    border-radius: 999px; font-size: 14px;
+    flex: 1; min-width: 0; border: 0; outline: 0; background: none;
+    padding: 9px 10px; font: inherit; font-size: 14px; color: var(--ink);
   }
+  #searchInput::placeholder { color: #98a3c0; }
+
   button {
-    border: 0; border-radius: 8px; padding: 8px 12px; font-size: 13px;
-    background: var(--navy); color: #fff; cursor: pointer;
+    font: inherit; font-size: 13.5px; font-weight: 600;
+    border: 0; border-radius: 999px; padding: 9px 18px; cursor: pointer;
+    background: var(--indigo); color: #fff;
+    transition: background .15s, transform .1s, box-shadow .15s;
   }
-  button.ghost { background: #fff; color: var(--navy); border: 1px solid var(--navy); }
-  button:disabled { opacity: .4; cursor: default; }
+  button:hover:not(:disabled) { background: var(--indigo-deep); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button.ghost { background: var(--white); color: var(--indigo); border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
+  button.ghost:hover:not(:disabled) { background: var(--sky); }
+  button:disabled { opacity: .5; cursor: default; }
+  #backBtn { margin-left: auto; }
 
   /* ---------- 본문 ---------- */
-  main { flex: 1; display: flex; min-height: 0; }
-  #mapWrap { flex: 1; position: relative; min-width: 0; }
+  main { flex: 1; display: flex; min-height: 0; gap: 16px; padding: 0 16px 16px 0; }
+  #mapWrap {
+    flex: 1; position: relative; min-width: 0; overflow: hidden;
+    border-radius: 22px; border: 1px solid var(--line); box-shadow: var(--shadow);
+    background:
+      radial-gradient(circle at 1px 1px, #c9d5f2 1.2px, transparent 1.6px) 0 0 / 24px 24px,
+      radial-gradient(120% 90% at 0% 0%, #ffffff 0%, #eef3ff 55%, #e6edff 100%);
+  }
   #map { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
   #map.dragging { cursor: grabbing; }
-  .zoom { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 6px; }
-  .zoom button { width: 36px; padding: 8px 0; }
-  .zoom button.wide { width: auto; padding: 8px 12px; }
-  .hint { position: absolute; right: 12px; bottom: 12px; font-size: 12px; color: #6b7a90; }
+
+  .zoom {
+    position: absolute; left: 16px; bottom: 16px; display: flex; gap: 6px;
+    padding: 5px; background: rgba(255,255,255,.9); backdrop-filter: blur(6px);
+    border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow-sm);
+  }
+  .zoom button { width: 34px; height: 34px; padding: 0; font-size: 18px; line-height: 1; background: none; color: var(--ink); }
+  .zoom button:hover:not(:disabled) { background: var(--sky); }
+  .zoom button.wide { width: auto; padding: 0 14px; font-size: 13px; color: var(--indigo); }
+  .hint {
+    position: absolute; right: 16px; bottom: 16px; font-size: 12px; color: var(--muted);
+    background: rgba(255,255,255,.85); border: 1px solid var(--line);
+    padding: 7px 13px; border-radius: 999px;
+  }
 
   /* ---------- 지도 안의 그림 ---------- */
-  .edge { fill: none; stroke: #9db4d8; stroke-width: 2; }
-  .node { cursor: pointer; }
+  .edge { fill: none; stroke: #b4c3ee; stroke-width: 2.5; stroke-linecap: round; }
+  .node { cursor: pointer; filter: drop-shadow(0 4px 8px rgba(40,60,140,.14)); transition: filter .15s; }
+  .node:hover { filter: drop-shadow(0 6px 12px rgba(40,60,140,.26)); }
   .node rect { fill: #fff; stroke: var(--line); stroke-width: 1.5; }
-  .node.root rect { fill: var(--navy); stroke: var(--navy); }
-  .node.selected rect { stroke: var(--blue); stroke-width: 3; }
-  .node text { font-size: 15px; fill: #1b2433; pointer-events: none; }
-  .node.root text { fill: #fff; }
-  .node .badge { fill: var(--blue); }
-  .node .badge-text { fill: #fff; font-size: 16px; font-weight: 700; }
+  .node.root rect { fill: url(#rootGrad); stroke: none; }
+  .node.selected rect { stroke: var(--indigo); stroke-width: 3; }
+  .node.root.selected rect { stroke: #fff; stroke-width: 3; }
+  .node text { font-size: 15px; font-weight: 600; fill: var(--ink); pointer-events: none; }
+  .node.root text { fill: #fff; font-weight: 700; }
+  .node .badge { fill: var(--indigo); stroke: #fff; stroke-width: 2.5; }
+  .node .badge-text { fill: #fff; font-size: 15px; font-weight: 700; }
 
   /* ---------- 오른쪽 패널 ---------- */
-  aside {
-    width: 320px; background: #fff; border-left: 1px solid var(--line);
-    padding: 16px; overflow-y: auto;
+  aside { width: 336px; flex: none; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-bottom: 2px; }
+  .card {
+    background: var(--white); border: 1px solid var(--line);
+    border-radius: 20px; padding: 18px; box-shadow: var(--shadow);
   }
-  aside h3 { margin: 18px 0 8px; font-size: 14px; color: var(--navy); }
-  aside h3:first-child { margin-top: 0; }
-  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .card h3 { margin: 0 0 12px; font-size: 13.5px; font-weight: 700; color: var(--muted); }
+  .sel-title { font-size: 22px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
+  .actions button { padding: 8px 14px; font-size: 13px; }
   .paper {
-    border: 1px solid var(--line); border-radius: 10px;
-    padding: 10px 12px; margin-top: 8px; font-size: 13px;
+    background: var(--mist); border: 1px solid var(--line); border-radius: 14px;
+    padding: 12px 14px; margin-top: 10px; font-size: 13px; line-height: 1.45;
   }
-  .paper b { display: block; margin-bottom: 4px; }
-  .paper span { color: #6b7a90; }
-  .empty { font-size: 13px; color: #6b7a90; line-height: 1.5; }
+  .paper b { display: block; margin-bottom: 5px; color: var(--ink); font-size: 13.5px; font-weight: 700; }
+  .paper span { color: var(--muted); font-size: 12.5px; }
+  .empty { font-size: 13px; color: var(--muted); line-height: 1.55; margin: 12px 0 0; }
   ol.history, ul.saved { margin: 0; padding: 0; list-style: none; }
+  ol.history { display: flex; flex-wrap: wrap; gap: 6px; }
   ol.history li {
-    display: inline-block; margin: 0 4px 6px 0; padding: 4px 10px;
-    border-radius: 999px; background: #eef3fb; font-size: 12px; cursor: pointer;
+    padding: 5px 11px; border-radius: 999px; background: var(--sky); color: var(--indigo-deep);
+    font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .15s;
   }
-  ol.history li.now { background: var(--navy); color: #fff; }
+  ol.history li:hover { background: #d9e3ff; }
+  ol.history li.now { background: var(--indigo); color: #fff; }
   ul.saved li {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 8px 12px; margin-bottom: 6px; border-radius: 8px;
-    background: var(--navy); color: #fff; font-size: 13px; cursor: pointer;
+    padding: 10px 14px; margin-bottom: 8px; border-radius: 12px;
+    background: var(--mist); border: 1px solid var(--line);
+    color: var(--ink); font-size: 13.5px; font-weight: 600; cursor: pointer;
+    transition: border-color .15s, background .15s;
   }
-  ul.saved li .x { opacity: .7; padding-left: 10px; }
+  ul.saved li:hover { border-color: var(--indigo); background: var(--sky); }
+  ul.saved li.empty { background: none; border: 0; padding: 0; margin: 0; color: var(--muted); font-weight: 400; cursor: default; }
+  ul.saved li .x { color: var(--muted); padding-left: 10px; }
+  ul.saved li .x:hover { color: var(--ink); }
 
-  @media (max-width: 760px) {
-    main { flex-direction: column; }
-    aside { width: 100%; max-height: 40%; border-left: 0; border-top: 1px solid var(--line); }
+  @media (max-width: 860px) {
+    body { flex-direction: column; height: auto; min-height: 100vh; }
+    nav.rail {
+      width: 100%; flex-direction: row; justify-content: space-around; padding: 8px;
+      border-right: 0; border-bottom: 1px solid var(--line); order: 2; gap: 0;
+    }
+    .brand-mark, .nav-spacer { display: none; }
+    .shell { order: 1; }
+    header { flex-wrap: wrap; padding: 12px 14px; }
+    #searchForm { order: 3; flex-basis: 100%; max-width: none; }
+    main { flex-direction: column; padding: 0 12px 12px; }
+    #mapWrap { height: 58vh; flex: none; }
+    aside { width: 100%; overflow: visible; }
+    .hint { display: none; }
   }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
+<nav class="rail" aria-label="주요 메뉴">
+  <div class="brand-mark" aria-hidden="true">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8.2 11l7.6-4M8.2 13l7.6 4"/></svg>
+  </div>
+  <button class="nav-item" aria-disabled="true" title="준비 중이에요">
+    <svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Home
+  </button>
+  <button class="nav-item active" aria-current="page">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>Explore
+  </button>
+  <button class="nav-item" aria-disabled="true" title="준비 중이에요">
+    <svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 8.5l3 7M16 8.5l-3 7M8.5 7h7"/></svg>Connect
+  </button>
+  <span class="nav-spacer"></span>
+  <button class="nav-item" aria-disabled="true" title="준비 중이에요">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1-4 4.5-6 8-6s7 2 8 6"/></svg>Account
+  </button>
+</nav>
 
+<div class="shell">
 <header>
   <span class="logo">ReseaMate</span>
   <form id="searchForm">
-    <input id="searchInput" placeholder="Search for new keywords... (예: AI, 머신러닝)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input id="searchInput" placeholder="연구 키워드를 입력해보세요 (예: AI, 머신러닝)" aria-label="연구 키워드">
     <button type="submit">검색</button>
   </form>
   <button id="backBtn" class="ghost">← 이전 지점으로</button>
@@ -105,30 +215,40 @@
 <main>
   <section id="mapWrap">
     <svg id="map">
+      <defs>
+        <linearGradient id="rootGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#6a7bff"/><stop offset="1" stop-color="#3342c4"/>
+        </linearGradient>
+      </defs>
       <g id="viewport">
         <g id="edges"></g>
         <g id="nodes"></g>
       </g>
     </svg>
     <div class="zoom">
-      <button id="zoomIn" title="확대">+</button>
-      <button id="zoomOut" title="축소">−</button>
+      <button id="zoomIn" title="확대" aria-label="확대">+</button>
+      <button id="zoomOut" title="축소" aria-label="축소">−</button>
       <button id="fitBtn" class="wide">전체 보기</button>
     </div>
     <div class="hint">키워드 클릭 = 펼치기/접기 · 드래그 = 이동 · 스크롤 = 확대/축소</div>
   </section>
 
   <aside>
-    <h3>선택한 키워드</h3>
-    <div id="detail"></div>
-
-    <h3>탐색 경로 (클릭하면 그 지점으로 돌아가요)</h3>
-    <ol id="history" class="history"></ol>
-
-    <h3>저장된 주제</h3>
-    <ul id="saved" class="saved"></ul>
+    <section class="card">
+      <h3>선택한 키워드</h3>
+      <div id="detail"></div>
+    </section>
+    <section class="card">
+      <h3>탐색 경로 (클릭하면 그 지점으로 돌아가요)</h3>
+      <ol id="history" class="history"></ol>
+    </section>
+    <section class="card">
+      <h3>저장된 주제</h3>
+      <ul id="saved" class="saved"></ul>
+    </section>
   </aside>
 </main>
+</div>
 
 <script>
 /* =========================================================
@@ -326,8 +446,7 @@ function renderPanel() {
   const detail = document.getElementById("detail");
   detail.innerHTML = "";
   const sel = state.selected;
-  const title = el("div", { textContent: sel });
-  title.style.cssText = "font-size:20px;font-weight:800;color:#0b2a55";
+  const title = el("div", { textContent: sel, className: "sel-title" });
   detail.append(title);
 
   const isSaved = state.saved.includes(sel);
@@ -377,7 +496,6 @@ function renderPanel() {
   savedUl.innerHTML = "";
   if (state.saved.length === 0) {
     savedUl.append(el("li", { textContent: "아직 저장한 주제가 없어요", className: "empty" }));
-    savedUl.lastChild.style.cssText = "background:none;color:#6b7a90;cursor:default;padding:0";
   }
   state.saved.forEach(label => {
     const x = el("span", {
